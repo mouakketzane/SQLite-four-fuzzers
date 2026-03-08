@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.10)
 project(DataCoverageFuzzerProject C CXX)
 
 include(CheckCXXSourceCompiles)
+# Point to llvm since we are using Ubuntu smaller version of it
+include_directories(/usr/lib/llvm-13/include)
 
 add_subdirectory(test_targets)
 add_subdirectory(src)
