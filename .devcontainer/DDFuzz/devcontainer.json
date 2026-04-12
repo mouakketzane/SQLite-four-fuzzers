@@ -1,0 +1,8 @@
+{
+    "name": "DDFuzz Docker Container",
+    "build": {
+        "dockerfile": "Dockerfile.DDFuzz",
+        "context": "../.."
+    }
+
+}
