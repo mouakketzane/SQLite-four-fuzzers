@@ -1,2 +1,0 @@
-/usr/bin/llvm-ar-13 qc libwingfuzz_main.a CMakeFiles/wingfuzz_main.dir/FuzzerMain.cpp.o
-/usr/bin/llvm-ranlib-13 libwingfuzz_main.a
