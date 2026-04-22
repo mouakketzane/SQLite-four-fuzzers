@@ -1,24 +1,26 @@
 #!/usr/bin/env bash
-# benchmark_rhash.sh
-# Runs LibFuzzer, WingFuzz, and DDFuzz on RHash for 60 seconds each,
+# benchmark_cjson.sh
+# Runs LibFuzzer, WingFuzz, and DDFuzz on cJSON for 60 seconds each,
 # then measures and compares branch coverage, exec/s, corpus size, and crashes.
 #
-# Usage: ./benchmark_rhash.sh [duration_seconds]  (default: 60)
+# Prerequisites: run build_cjson.sh first.
+#
+# Usage: ./benchmark_cjson.sh [duration_seconds]  (default: 60)
 
 set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")" && pwd)"
 DURATION="${1:-60}"
 RUN_ID="$(date +%Y%m%d_%H%M%S)"
-OUTDIR="$REPO/results/benchmark_rhash_$RUN_ID"
-SEEDS="$REPO/rhash_corpus"
+OUTDIR="$REPO/results/benchmark_cjson_$RUN_ID"
+SEEDS="$REPO/cjson_corpus"
 
-LF_BIN="$REPO/rhash_libfuzzer"
-WF_BIN="$REPO/rhash_wingfuzz_real"
-DDF_BIN="/workspaces/CyberSecurity/rhash_DDFuzzer"   # path inside Docker
-COV_BIN="$REPO/rhash_cov_replay"                     # LLVM-instrumented replay binary
+LF_BIN="$REPO/cjson_libfuzzer"
+WF_BIN="$REPO/cjson_wingfuzz_real"
+DDF_BIN="/workspaces/CyberSecurity/cjson_DDFuzzer"
+COV_BIN="$REPO/cjson_cov_replay"
 
-RHASH_SRC="$REPO/test_targets/RHash"
+CJSON_TARGET="$REPO/test_targets/cjson"
 
 LLVM_PROFDATA="llvm-profdata"
 LLVM_COV="llvm-cov"
@@ -28,34 +30,30 @@ LLVM_COV="llvm-cov"
 # ---------------------------------------------------------------------------
 die() { echo "ERROR: $*" >&2; exit 1; }
 
+HAS_DDFUZZ=1
 check_bins() {
-    [ -f "$LF_BIN"  ] || die "rhash_libfuzzer not found"
-    [ -f "$WF_BIN"  ] || die "rhash_wingfuzz_real not found"
-    [ -f "$REPO/rhash_DDFuzzer" ] || die "rhash_DDFuzzer not found"
-    docker image inspect ddfuzz:local &>/dev/null || die "Docker image ddfuzz:local not found"
+    [ -f "$LF_BIN" ] || die "cjson_libfuzzer not found — run build_cjson.sh first"
+    [ -f "$WF_BIN" ] || die "cjson_wingfuzz_real not found — run build_cjson.sh first"
+    if [ ! -f "$REPO/cjson_DDFuzzer" ]; then
+        echo "WARNING: cjson_DDFuzzer not found — DDFuzz step will be skipped"
+        HAS_DDFUZZ=0
+    fi
+    if [ "$HAS_DDFUZZ" -eq 1 ]; then
+        docker image inspect ddfuzz:local &>/dev/null || { echo "WARNING: Docker image ddfuzz:local not found — DDFuzz step will be skipped"; HAS_DDFUZZ=0; }
+    fi
     command -v "$LLVM_PROFDATA" &>/dev/null || die "llvm-profdata not found"
     command -v "$LLVM_COV"      &>/dev/null || die "llvm-cov not found"
-    command -v clang &>/dev/null || die "clang not found (needed to build coverage replay binary)"
+    command -v clang &>/dev/null || die "clang not found"
 }
 
-# Build a coverage-instrumented standalone replay binary for RHash.
-# Rebuilds librhash with -fprofile-instr-generate so llvm-cov works.
 build_coverage_binary() {
     if [ -f "$COV_BIN" ]; then
-        echo "  (rhash_cov_replay already exists, skipping build)"
+        echo "  (cjson_cov_replay already exists, skipping build)"
         return
     fi
-    echo "Building rhash_cov_replay (coverage instrumented)..."
+    echo "Building cjson_cov_replay (coverage instrumented)..."
 
-    # Rebuild librhash with coverage flags (existing fuzzer binaries are
-    # already linked, so overwriting librhash.a here is safe)
-    cd "$RHASH_SRC/librhash"
-    rm -f *.o librhash.a
-    make CC="clang -fprofile-instr-generate -fcoverage-mapping -O2 -g" \
-         CFLAGS="" lib-static
-    cd "$REPO"
-
-    local main_src="$REPO/cov_replay_rhash_main.c"
+    local main_src="$REPO/cov_replay_cjson_main.c"
     cat > "$main_src" << 'EOF'
 #include <stdio.h>
 #include <stdlib.h>
@@ -85,10 +83,10 @@ int main(int argc, char **argv) {
 EOF
 
     clang -fprofile-instr-generate -fcoverage-mapping -O2 -g \
-        -I "$RHASH_SRC" \
+        -I"$CJSON_TARGET" \
         "$main_src" \
-        "$RHASH_SRC/rhash_harness.c" \
-        "$RHASH_SRC/librhash/librhash.a" \
+        "$CJSON_TARGET/cjson_harness.c" \
+        "$CJSON_TARGET/cJSON.c" \
         -o "$COV_BIN" \
         -ldl
     echo "  -> built $COV_BIN"
@@ -99,8 +97,6 @@ parse_lf_stat() {
     grep -oP "${key}:\s*\K[0-9]+" "$logfile" 2>/dev/null | tail -1 || echo "0"
 }
 
-# Replay each corpus file through the coverage binary, one invocation per file
-# so profraw filenames don't collide.
 measure_coverage() {
     local label="$1" corpus_dir="$2" profdata_out="$3"
     local profraw_dir="$OUTDIR/profraw_${label}"
@@ -153,7 +149,8 @@ build_coverage_binary
 mkdir -p "$OUTDIR/lf_corpus" "$OUTDIR/wf_corpus"
 
 echo "============================================"
-echo "  RHash Fuzzer Benchmark  (${DURATION}s each)"
+echo "  cJSON Fuzzer Benchmark  (${DURATION}s each)"
+
 echo "  Run ID : $RUN_ID"
 echo "  Output : $OUTDIR"
 echo "============================================"
@@ -206,33 +203,37 @@ echo ""
 echo "[3/3] DDFuzz — running for ${DURATION}s (Docker)..."
 DDF_LOG="$OUTDIR/ddf.log"
 DDF_OUT_HOST="$OUTDIR/ddf"
-DDF_OUT_DOCKER="/workspaces/CyberSecurity/results/benchmark_rhash_${RUN_ID}/ddf"
+DDF_OUT_DOCKER="/workspaces/CyberSecurity/results/benchmark_cjson_${RUN_ID}/ddf"
+DDF_EXECS="N/A"; DDF_CORPUS_SIZE="N/A"; DDF_CRASHES="N/A"; DDF_BRANCH_COV="N/A"
 
-docker run --rm \
-    -v "$REPO:/workspaces/CyberSecurity" \
-    -e AFL_SKIP_CPUFREQ=1 \
-    -e AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
-    -e AFL_NO_UI=1 \
-    --privileged \
-    ddfuzz:local \
-    bash -c "
-        timeout $DURATION afl-fuzz \
-            -i /workspaces/CyberSecurity/rhash_corpus \
-            -o $DDF_OUT_DOCKER \
-            -- $DDF_BIN || true
-        chmod -R 755 $DDF_OUT_DOCKER
-    " 2>&1 | tee "$DDF_LOG" || true
+if [ "$HAS_DDFUZZ" -eq 1 ]; then
+    docker run --rm \
+        -v "$REPO:/workspaces/CyberSecurity" \
+        -e AFL_SKIP_CPUFREQ=1 \
+        -e AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
+        -e AFL_NO_UI=1 \
+        --privileged \
+        ddfuzz:local \
+        bash -c "
+            timeout $DURATION afl-fuzz \
+                -i /workspaces/CyberSecurity/cjson_corpus \
+                -o $DDF_OUT_DOCKER \
+                -- $DDF_BIN || true
+            chmod -R 755 $DDF_OUT_DOCKER
+        " 2>&1 | tee "$DDF_LOG" || true
 
-DDF_STATS="$DDF_OUT_HOST/default/fuzzer_stats"
-DDF_QUEUE="$DDF_OUT_HOST/default/queue"
-DDF_CRASH_DIR="$DDF_OUT_HOST/default/crashes"
+    DDF_STATS="$DDF_OUT_HOST/default/fuzzer_stats"
+    DDF_QUEUE="$DDF_OUT_HOST/default/queue"
+    DDF_CRASH_DIR="$DDF_OUT_HOST/default/crashes"
 
-if [ -f "$DDF_STATS" ]; then
-    DDF_EXECS=$(awk -F' *: *' '/execs_per_sec/  { printf "%d", $2 }' "$DDF_STATS")
-    DDF_CORPUS_SIZE=$(awk -F' *: *' '/corpus_count|paths_total/ { print $2; exit }' "$DDF_STATS")
-    DDF_CRASHES=$(find "$DDF_CRASH_DIR" -maxdepth 1 -type f ! -name "README.txt" 2>/dev/null | wc -l || echo 0)
+    if [ -f "$DDF_STATS" ]; then
+        DDF_EXECS=$(awk -F' *: *' '/execs_per_sec/  { printf "%d", $2 }' "$DDF_STATS")
+        DDF_CORPUS_SIZE=$(awk -F' *: *' '/corpus_count|paths_total/ { print $2; exit }' "$DDF_STATS")
+        DDF_CRASHES=$(find "$DDF_CRASH_DIR" -maxdepth 1 -type f ! -name "README.txt" 2>/dev/null | wc -l || echo 0)
+    fi
 else
-    DDF_EXECS="N/A"; DDF_CORPUS_SIZE="N/A"; DDF_CRASHES="N/A"
+    echo "  (skipped)"
+    touch "$DDF_LOG"
 fi
 echo "  -> exec/s: $DDF_EXECS  |  corpus: $DDF_CORPUS_SIZE  |  crashes: $DDF_CRASHES"
 echo ""
@@ -242,23 +243,21 @@ echo ""
 # ---------------------------------------------------------------------------
 echo "Measuring branch coverage for each corpus..."
 
-# If a fuzzer's output corpus is empty (no new edges found beyond seeds),
-# fall back to the seed corpus so coverage is still measured fairly.
 lf_cov_src="$OUTDIR/lf_corpus"; [ "$(find "$lf_cov_src" -maxdepth 1 -type f | wc -l)" -eq 0 ] && lf_cov_src="$SEEDS"
 wf_cov_src="$OUTDIR/wf_corpus"; [ "$(find "$wf_cov_src" -maxdepth 1 -type f | wc -l)" -eq 0 ] && wf_cov_src="$SEEDS"
 
-measure_coverage "lf"  "$lf_cov_src" "$OUTDIR/lf.profdata"  && \
-    LF_BRANCH_COV=$(get_branch_cov "$OUTDIR/lf.profdata")     || LF_BRANCH_COV="N/A"
+measure_coverage "lf"  "$lf_cov_src" "$OUTDIR/lf.profdata" && \
+    LF_BRANCH_COV=$(get_branch_cov "$OUTDIR/lf.profdata")    || LF_BRANCH_COV="N/A"
 
-measure_coverage "wf"  "$wf_cov_src" "$OUTDIR/wf.profdata"  && \
-    WF_BRANCH_COV=$(get_branch_cov "$OUTDIR/wf.profdata")     || WF_BRANCH_COV="N/A"
+measure_coverage "wf"  "$wf_cov_src" "$OUTDIR/wf.profdata" && \
+    WF_BRANCH_COV=$(get_branch_cov "$OUTDIR/wf.profdata")    || WF_BRANCH_COV="N/A"
 
-if [ -d "$DDF_QUEUE" ] && [ "$(find "$DDF_QUEUE" -maxdepth 1 -type f | wc -l)" -gt 0 ]; then
-    measure_coverage "ddf" "$DDF_QUEUE" "$OUTDIR/ddf.profdata"     && \
-        DDF_BRANCH_COV=$(get_branch_cov "$OUTDIR/ddf.profdata")     || DDF_BRANCH_COV="N/A"
-else
-    DDF_BRANCH_COV="N/A"
+if [ "$HAS_DDFUZZ" -eq 1 ] && [ -d "${DDF_QUEUE:-}" ] && \
+   [ "$(find "$DDF_QUEUE" -maxdepth 1 -type f | wc -l)" -gt 0 ]; then
+    measure_coverage "ddf" "$DDF_QUEUE" "$OUTDIR/ddf.profdata" && \
+        DDF_BRANCH_COV=$(get_branch_cov "$OUTDIR/ddf.profdata")  || DDF_BRANCH_COV="N/A"
 fi
+
 
 # ---------------------------------------------------------------------------
 # Results table
@@ -296,7 +295,7 @@ echo ""
 echo "Full logs and corpora saved to: $OUTDIR"
 
 mkdir -p "$REPO/results"
-cat > "$REPO/results/latest_rhash.env" << ENVEOF
+cat > "$REPO/results/latest_cjson.env" << ENVEOF
 LF_BRANCH_COV=$LF_BRANCH_COV
 LF_EXECS=$LF_EXECS
 WF_BRANCH_COV=$WF_BRANCH_COV

@@ -95,26 +95,6 @@ cd /workspaces/CyberSecurity
  clang++-13 -O2 -g -fsanitize=fuzzer,address     -fprofile-instr-generate -fcoverage-mapping     /workspaces/CyberSecurity/build/src/wingfuzz/libwingfuzz_main.a     /workspaces/CyberSecurity/build/src/wingfuzz/libwingfuzz_static.a     /workspaces/CyberSecurity/build/rhash_harness.o     /workspaces/CyberSecurity/test_targets/RHash/librhash/librhash.a     -o rhash_wingfuzz_real
 ```
 
-## For StorFuzz
-
-
-Can you the automated build script i made:
-```bash
-./storfuzz.sh
-```
-
-```bash
-cd ./fuzzers/storfuzz_fuzzbench_in_process
-unset LIBAFL_EDGES_MAP_SIZE_MAX
-unset STORFUZZ_MAP_SIZE
-CFLAGS="" CXXFLAGS="" cargo build --release
-
-./target/release/libafl_cc --libafl <target_without_main.c> -o target_without_main
-
-./target_without_main --help
-```
-
-
 
 
 # For libfuzzer

@@ -5,18 +5,14 @@ build/
 *.so
 
 # Compiled fuzzers and replay binaries
-rhash_DDFuzzer
-rhash_libfuzzer
-rhash_wingfuzz_real
-sqlite3_DDFuzzer
-sqlite_libfuzzer
-sqlite_wingfuzzer_real
-rhash_cov_replay
-sqlite_cov_replay
+*_DDFuzzer
+*_libfuzzer
+*_wingfuzz_real
+*_wingfuzzer_real
+*_cov_replay
 
 # Fuzzing corpora
-rhash_corpus/
-sqlite_corpus/
+*_corpus/
 expr_corpus/
 corpus/
 

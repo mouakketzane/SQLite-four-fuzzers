@@ -3,8 +3,7 @@
 # Runs LibFuzzer, WingFuzz, and DDFuzz on SQLite for 60 seconds each,
 # then measures and compares branch coverage, exec/s, corpus size, and crashes.
 #
-# Prerequisites: run build_comparable.sh first so all three fuzzers target
-# the same sqlite3_full codebase.
+# Prerequisites: run build_comparable.sh first.
 #
 # Usage: ./benchmark_sqlite.sh [duration_seconds]  (default: 60)
 
@@ -281,7 +280,6 @@ echo "Cov Edges   = inline coverage edge counter reported by LibFuzzer/WingFuzz"
 echo "Branch Cov% = LLVM branch coverage from replaying corpus (fair, same binary)"
 echo ""
 
-# Pick winner by branch coverage % (strip the % sign for numeric comparison)
 best_pct=0; winner="(unknown)"
 for pair in "LibFuzzer:$LF_BRANCH_COV" "WingFuzz:$WF_BRANCH_COV" "DDFuzz:$DDF_BRANCH_COV"; do
     name="${pair%%:*}"; pct="${pair##*:}"
@@ -294,3 +292,13 @@ done
 echo "Best branch coverage: $winner ($best_pct%)"
 echo ""
 echo "Full logs and corpora saved to: $OUTDIR"
+
+mkdir -p "$REPO/results"
+cat > "$REPO/results/latest_sqlite.env" << ENVEOF
+LF_BRANCH_COV=$LF_BRANCH_COV
+LF_EXECS=$LF_EXECS
+WF_BRANCH_COV=$WF_BRANCH_COV
+WF_EXECS=$WF_EXECS
+DDF_BRANCH_COV=$DDF_BRANCH_COV
+DDF_EXECS=$DDF_EXECS
+ENVEOF
