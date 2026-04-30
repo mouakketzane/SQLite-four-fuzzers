@@ -1,8 +1,21 @@
 # Build artifacts
 build/
 *.o
-*.a
 *.so
+*.a
+
+# SQLite autoconf artifacts (can appear in repo root or sqlite3_full/)
+config.log
+jimsh0
+lemon
+mkkeywordhash
+mksourceid
+src-verify
+sqlite3.pc
+
+# Keep pre-built WingFuzz runtime libraries
+!prebuilt/
+!prebuilt/**
 
 # Compiled fuzzers and replay binaries
 *_DDFuzzer

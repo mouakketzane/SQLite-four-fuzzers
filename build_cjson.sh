@@ -9,11 +9,14 @@ set -euo pipefail
 REPO="$(cd "$(dirname "$0")" && pwd)"
 TARGET="$REPO/test_targets/cjson"
 BUILD="$REPO/build"
+PREBUILT="$REPO/prebuilt/wingfuzz"
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 
 command -v clang   &>/dev/null || die "clang not found"
 command -v clang++ &>/dev/null || die "clang++ not found"
+[ -f "$PREBUILT/libwingfuzz_main.a"   ] || die "prebuilt/wingfuzz/libwingfuzz_main.a not found"
+[ -f "$PREBUILT/libwingfuzz_static.a" ] || die "prebuilt/wingfuzz/libwingfuzz_static.a not found"
 
 echo "=== Building LibFuzzer binary for cJSON ==="
 clang -g -O2 -fsanitize=fuzzer,address \
@@ -37,8 +40,8 @@ clang++ -g -O2 -fsanitize=address -no-pie \
     -fprofile-instr-generate -fcoverage-mapping \
     "$BUILD/cjson_harness.o" "$BUILD/cJSON_wf.o" \
     -Xlinker --start-group \
-        "$BUILD/src/wingfuzz/libwingfuzz_main.a" \
-        "$BUILD/src/wingfuzz/libwingfuzz_static.a" \
+        "$PREBUILT/libwingfuzz_main.a" \
+        "$PREBUILT/libwingfuzz_static.a" \
     -Xlinker --end-group \
     -lpthread -ldl \
     -o "$REPO/cjson_wingfuzz_real"

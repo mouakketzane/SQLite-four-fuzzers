@@ -1,6 +1,6 @@
 # Fuzzer Benchmark Results
 
-Each fuzzer ran for **60s** per target. Branch coverage was measured by
+Each fuzzer ran for **1s** per target. Branch coverage was measured by
 replaying the final corpus through a shared LLVM-instrumented binary (fair
 comparison — same binary for all three fuzzers on each target).
 
@@ -8,35 +8,35 @@ comparison — same binary for all three fuzzers on each target).
 
 | Fuzzer    | Branch Cov | Exec/s |
 |-----------|----------:|-------:|
-| LibFuzzer | 3.98% | 16,069 |
-| WingFuzz  | 3.99% | 19,414 |
-| DDFuzz    | 4.09% | 13,875 |
+| LibFuzzer | 13.73% | 11818 |
+| WingFuzz  | 13.54% | 7591 |
+| DDFuzz    | 13.62% | 25693 |
 
 ## RHash
 
 | Fuzzer    | Branch Cov | Exec/s |
 |-----------|----------:|-------:|
-| LibFuzzer | 4.45% | 97,350 |
-| WingFuzz  | 4.45% | 97,359 |
-| DDFuzz    | 4.45% | 21,132 |
+| LibFuzzer | 6.96% | 146388 |
+| WingFuzz  | 6.96% | 169445 |
+| DDFuzz    | 6.96% | 47995 |
 
 ## cJSON
 
 | Fuzzer    | Branch Cov | Exec/s |
 |-----------|----------:|-------:|
-| LibFuzzer | 38.07% | 34,170 |
-| WingFuzz  | 39.27% | 77,442 |
-| DDFuzz    | 37.89% | 25,863 |
+| LibFuzzer | 38.46% | 149516 |
+| WingFuzz  | 37.24% | 237470 |
+| DDFuzz    | 34.99% | 50509 |
 
 ## re2
 
 | Fuzzer    | Branch Cov | Exec/s |
 |-----------|----------:|-------:|
-| LibFuzzer | 70.00% | 41,837 |
-| WingFuzz  | 70.00% | 41,401 |
-| DDFuzz    | 70.00% | 7,661 |
+| LibFuzzer | 70.00% | 69115 |
+| WingFuzz  | 70.00% | 41373 |
+| DDFuzz    | 70.00% | 18580 |
 
 > Branch Cov = LLVM branch coverage % from `llvm-cov report` over the final corpus.
 > Exec/s = executions per second reported at end of run.
-> Fuzzing time = 60s per fuzzer per target.
+> Fuzzing time = 1s per fuzzer per target.
 > re2 coverage measured over harness only (system shared library).

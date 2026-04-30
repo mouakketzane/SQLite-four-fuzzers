@@ -11,11 +11,14 @@ set -euo pipefail
 REPO="$(cd "$(dirname "$0")" && pwd)"
 TARGET="$REPO/test_targets/re2"
 BUILD="$REPO/build"
+PREBUILT="$REPO/prebuilt/wingfuzz"
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 
 command -v clang++ &>/dev/null || die "clang++ not found"
 pkg-config --exists re2       || die "re2 not found via pkg-config — install libre2-dev"
+[ -f "$PREBUILT/libwingfuzz_main.a"   ] || die "prebuilt/wingfuzz/libwingfuzz_main.a not found"
+[ -f "$PREBUILT/libwingfuzz_static.a" ] || die "prebuilt/wingfuzz/libwingfuzz_static.a not found"
 
 RE2_CFLAGS=$(pkg-config --cflags re2)
 RE2_LIBS=$(pkg-config --libs re2)
@@ -41,8 +44,8 @@ clang++ -g -O2 -fsanitize=address -no-pie \
     -fprofile-instr-generate -fcoverage-mapping \
     "$BUILD/re2_harness.o" \
     -Xlinker --start-group \
-        "$BUILD/src/wingfuzz/libwingfuzz_main.a" \
-        "$BUILD/src/wingfuzz/libwingfuzz_static.a" \
+        "$PREBUILT/libwingfuzz_main.a" \
+        "$PREBUILT/libwingfuzz_static.a" \
     -Xlinker --end-group \
     $RE2_LIBS -lpthread -ldl \
     -o "$REPO/re2_wingfuzz_real"

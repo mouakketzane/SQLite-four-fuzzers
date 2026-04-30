@@ -69,7 +69,7 @@ libdir      = ${exec_prefix}/lib
 INSTALL = /usr/bin/install
 AR = ar
 AR.flags = cr
-CC = /workspaces/CyberSecurity/src/StorFuzz-LibAFL/fuzzers/storfuzz_fuzzbench_in_process/target/release/libafl_cc
+CC = afl-clang-fast
 B.cc = cc -g
 T.cc = $(CC)
 #
@@ -100,7 +100,7 @@ LDFLAGS.configure =
 CFLAGS.core = -fPIC
 LDFLAGS.shlib = -shared
 LDFLAGS.zlib = -lz
-LDFLAGS.math = 
+LDFLAGS.math = -lm
 LDFLAGS.rpath = -rpath /usr/local/lib
 LDFLAGS.pthread = 
 LDFLAGS.dlopen = 
@@ -260,11 +260,11 @@ AS_AUTO_DEF = $(TOP)/auto.def
 # Shell commands to re-run $(TOP)/configure with the same args it was
 # invoked with to produce this makefile.
 #
-AS_AUTORECONFIG = cd "/workspaces/CyberSecurity/test_targets/sqlite3_full" && ./configure --enable-static --disable-shared CC=/workspaces/CyberSecurity/src/StorFuzz-LibAFL/fuzzers/storfuzz_fuzzbench_in_process/target/release/libafl_cc CXX=clang++-17
+AS_AUTORECONFIG = cd "/workspaces/CyberSecurity/test_targets/sqlite3_full" && ./configure --enable-static --disable-shared --disable-amalgamation CC=afl-clang-fast
 .PHONY: config reconfigure
 config reconfigure:
 	$(AS_AUTORECONFIG)
-USE_AMALGAMATION ?= 1
+USE_AMALGAMATION ?= 0
 LINK_TOOLS_DYNAMICALLY ?= 0
 AMALGAMATION_GEN_FLAGS ?= --linemacros=0
 EXTRA_SRC ?= 

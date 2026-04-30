@@ -28,11 +28,17 @@ LLVM_COV="llvm-cov"
 # ---------------------------------------------------------------------------
 die() { echo "ERROR: $*" >&2; exit 1; }
 
+HAS_DDFUZZ=1
 check_bins() {
     [ -f "$LF_BIN"  ] || die "sqlite_libfuzzer not found — run build_comparable.sh first"
     [ -f "$WF_BIN"  ] || die "sqlite_wingfuzzer_real not found — run build_comparable.sh first"
-    [ -f "$REPO/sqlite3_DDFuzzer" ] || die "sqlite3_DDFuzzer not found — run build_comparable.sh first"
-    docker image inspect ddfuzz:local &>/dev/null || die "Docker image ddfuzz:local not found"
+    if [ ! -f "$REPO/sqlite3_DDFuzzer" ]; then
+        echo "WARNING: sqlite3_DDFuzzer not found — DDFuzz step will be skipped"
+        HAS_DDFUZZ=0
+    fi
+    if [ "$HAS_DDFUZZ" -eq 1 ]; then
+        docker image inspect ddfuzz:local &>/dev/null || { echo "WARNING: Docker image ddfuzz:local not found — DDFuzz step will be skipped"; HAS_DDFUZZ=0; }
+    fi
     command -v "$LLVM_PROFDATA" &>/dev/null || die "llvm-profdata not found"
     command -v "$LLVM_COV"      &>/dev/null || die "llvm-cov not found"
     command -v clang &>/dev/null || die "clang not found (needed to build coverage replay binary)"
@@ -206,33 +212,36 @@ echo "[3/3] DDFuzz — running for ${DURATION}s (Docker)..."
 DDF_LOG="$OUTDIR/ddf.log"
 DDF_OUT_HOST="$OUTDIR/ddf"
 DDF_OUT_DOCKER="/workspaces/CyberSecurity/results/benchmark_${RUN_ID}/ddf"
+DDF_EXECS="N/A"; DDF_CORPUS_SIZE="N/A"; DDF_CRASHES="N/A"; DDF_BRANCH_COV="N/A"
 
-docker run --rm \
-    -v "$REPO:/workspaces/CyberSecurity" \
-    -e AFL_SKIP_CPUFREQ=1 \
-    -e AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
-    -e AFL_NO_UI=1 \
-    --privileged \
-    ddfuzz:local \
-    bash -c "
-        timeout $DURATION afl-fuzz \
-            -i /workspaces/CyberSecurity/sqlite_corpus \
-            -o $DDF_OUT_DOCKER \
-            -- $DDF_BIN || true
-        chmod -R 755 $DDF_OUT_DOCKER
-    " 2>&1 | tee "$DDF_LOG" || true
+if [ "$HAS_DDFUZZ" -eq 1 ]; then
+    docker run --rm \
+        -v "$REPO:/workspaces/CyberSecurity" \
+        -e AFL_SKIP_CPUFREQ=1 \
+        -e AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
+        -e AFL_NO_UI=1 \
+        --privileged \
+        ddfuzz:local \
+        bash -c "
+            timeout $DURATION afl-fuzz \
+                -i /workspaces/CyberSecurity/sqlite_corpus \
+                -o $DDF_OUT_DOCKER \
+                -- $DDF_BIN || true
+            chmod -R 755 $DDF_OUT_DOCKER
+        " 2>&1 | tee "$DDF_LOG" || true
 
-DDF_STATS="$DDF_OUT_HOST/default/fuzzer_stats"
-DDF_QUEUE="$DDF_OUT_HOST/default/queue"
-DDF_CRASH_DIR="$DDF_OUT_HOST/default/crashes"
+    DDF_STATS="$DDF_OUT_HOST/default/fuzzer_stats"
+    DDF_QUEUE="$DDF_OUT_HOST/default/queue"
+    DDF_CRASH_DIR="$DDF_OUT_HOST/default/crashes"
 
-if [ -f "$DDF_STATS" ]; then
-    DDF_EXECS=$(awk -F' *: *' '/execs_per_sec/  { printf "%d", $2 }' "$DDF_STATS")
-    # AFL++ uses corpus_count; older AFL uses paths_total
-    DDF_CORPUS_SIZE=$(awk -F' *: *' '/corpus_count|paths_total/ { print $2; exit }' "$DDF_STATS")
-    DDF_CRASHES=$(find "$DDF_CRASH_DIR" -maxdepth 1 -type f ! -name "README.txt" 2>/dev/null | wc -l || echo 0)
+    if [ -f "$DDF_STATS" ]; then
+        DDF_EXECS=$(awk -F' *: *' '/execs_per_sec/  { printf "%d", $2 }' "$DDF_STATS")
+        DDF_CORPUS_SIZE=$(awk -F' *: *' '/corpus_count|paths_total/ { print $2; exit }' "$DDF_STATS")
+        DDF_CRASHES=$(find "$DDF_CRASH_DIR" -maxdepth 1 -type f ! -name "README.txt" 2>/dev/null | wc -l || echo 0)
+    fi
 else
-    DDF_EXECS="N/A"; DDF_CORPUS_SIZE="N/A"; DDF_CRASHES="N/A"
+    echo "  (skipped)"
+    touch "$DDF_LOG"
 fi
 echo "  -> exec/s: $DDF_EXECS  |  corpus: $DDF_CORPUS_SIZE  |  crashes: $DDF_CRASHES"
 echo ""
@@ -251,11 +260,10 @@ measure_coverage "lf"  "$lf_cov_src" "$OUTDIR/lf.profdata"  && \
 measure_coverage "wf"  "$wf_cov_src" "$OUTDIR/wf.profdata"  && \
     WF_BRANCH_COV=$(get_branch_cov "$OUTDIR/wf.profdata")     || WF_BRANCH_COV="N/A"
 
-if [ -d "$DDF_QUEUE" ] && [ "$(find "$DDF_QUEUE" -maxdepth 1 -type f | wc -l)" -gt 0 ]; then
+if [ "$HAS_DDFUZZ" -eq 1 ] && [ -d "${DDF_QUEUE:-}" ] && \
+   [ "$(find "$DDF_QUEUE" -maxdepth 1 -type f | wc -l)" -gt 0 ]; then
     measure_coverage "ddf" "$DDF_QUEUE" "$OUTDIR/ddf.profdata"     && \
         DDF_BRANCH_COV=$(get_branch_cov "$OUTDIR/ddf.profdata")     || DDF_BRANCH_COV="N/A"
-else
-    DDF_BRANCH_COV="N/A"
 fi
 
 # ---------------------------------------------------------------------------

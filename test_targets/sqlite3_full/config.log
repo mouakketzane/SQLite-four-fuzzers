@@ -1,6 +1,6 @@
-Invoked as: ./configure --enable-static --disable-shared
+Invoked as: ./configure --enable-static --disable-shared --disable-amalgamation
 Tclsh: /workspaces/CyberSecurity/test_targets/sqlite3_full/jimsh0
-Failed: /workspaces/CyberSecurity/src/StorFuzz-LibAFL/fuzzers/storfuzz_fuzzbench_in_process/target/release/libafl_cc -c -O2 -g conftest__.c -o conftest__.o
+Failed: afl-clang-fast -c -O2 -g conftest__.c -o conftest__.o
 conftest__.c:3:15: error: '_x' declared as an array with a negative size
     3 | static int _x[sizeof(off_t) == 4 ? 1 : -1] = { 1 };
       |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -13,9 +13,9 @@ static int _x[sizeof(off_t) == 4 ? 1 : -1] = { 1 };
 return 0;
 }
 ============
-Failed: /workspaces/CyberSecurity/src/StorFuzz-LibAFL/fuzzers/storfuzz_fuzzbench_in_process/target/release/libafl_cc -O2 -g conftest__.c -o conftest__
-/usr/bin/ld: /tmp/conftest__-20213c.o: in function `main':
-conftest__.c:(.text.main[main]+0xe): undefined reference to `localtime_s'
+Failed: afl-clang-fast -O2 -g conftest__.c -o conftest__
+/usr/bin/ld: /tmp/conftest__-f017c0.o: in function `main':
+/workspaces/CyberSecurity/test_targets/sqlite3_full/conftest__.c:3:(.text+0x47): undefined reference to `localtime_s'
 clang: error: linker command failed with exit code 1 (use -v to see invocation)
 ============
 The failed code was:
@@ -25,9 +25,9 @@ localtime_s();
 return 0;
 }
 ============
-Failed: /workspaces/CyberSecurity/src/StorFuzz-LibAFL/fuzzers/storfuzz_fuzzbench_in_process/target/release/libafl_cc -O2 -g conftest__.c -o conftest__
-/usr/bin/ld: /tmp/conftest__-1cb4e4.o: in function `main':
-conftest__.c:(.text.main[main]+0xe): undefined reference to `deflate'
+Failed: afl-clang-fast -O2 -g conftest__.c -o conftest__
+/usr/bin/ld: /tmp/conftest__-fac9c0.o: in function `main':
+/workspaces/CyberSecurity/test_targets/sqlite3_full/conftest__.c:3:(.text+0x47): undefined reference to `deflate'
 clang: error: linker command failed with exit code 1 (use -v to see invocation)
 ============
 The failed code was:
@@ -37,12 +37,29 @@ deflate();
 return 0;
 }
 ============
-Failed: /workspaces/CyberSecurity/src/StorFuzz-LibAFL/fuzzers/storfuzz_fuzzbench_in_process/target/release/libafl_cc -c -fsanitize=bounds-strict -O2 -g conftest__.c -o conftest__.o
+Failed: afl-clang-fast -c -fsanitize=bounds-strict -O2 -g conftest__.c -o conftest__.o
 clang: error: unsupported argument 'bounds-strict' to option '-fsanitize='
 ============
 The failed code was:
 int main(void) {
 
+return 0;
+}
+============
+Failed: afl-clang-fast -O2 -g conftest__.c -o conftest__
+conftest__.c:1:13: warning: incompatible redeclaration of library function 'ceil' [-Wincompatible-library-redeclaration]
+    1 | extern void ceil(void);
+      |             ^
+conftest__.c:1:13: note: 'ceil' is a builtin with type 'double (double)'
+1 warning generated.
+/usr/bin/ld: /tmp/conftest__-cb4caa.o: in function `main':
+/workspaces/CyberSecurity/test_targets/sqlite3_full/conftest__.c:3:(.text+0x47): undefined reference to `ceil'
+clang: error: linker command failed with exit code 1 (use -v to see invocation)
+============
+The failed code was:
+extern void ceil(void);
+int main(void) {
+ceil();
 return 0;
 }
 ============
