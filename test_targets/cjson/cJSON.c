@@ -860,7 +860,7 @@ static cJSON_bool parse_string(cJSON * const item, parse_buffer * const input_bu
 
         /* This is at most how much we need for the output */
         allocation_length = (size_t) (input_end - buffer_at_offset(input_buffer)) - skipped_bytes;
-        output = (unsigned char*)input_buffer->hooks.allocate(allocation_length + sizeof(""));
+        output = (unsigned char*)input_buffer->hooks.allocate(allocation_length - 1); /* BUG_C1: missing +sizeof("") — null terminator write overflows by 1 byte */
         if (output == NULL)
         {
             goto fail; /* allocation failure */
@@ -997,7 +997,7 @@ static cJSON_bool print_string_ptr(const unsigned char * const input, printbuffe
                 if (*input_pointer < 32)
                 {
                     /* UTF-16 escape sequence uXXXX */
-                    escape_characters += 5;
+                    escape_characters += 4; /* BUG_C2: should be +5; buffer 1 byte short per control char — heap overflow on print */
                 }
                 break;
         }

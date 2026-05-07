@@ -14,7 +14,7 @@ return 0;
 }
 ============
 Failed: afl-clang-fast -O2 -g conftest__.c -o conftest__
-/usr/bin/ld: /tmp/conftest__-f017c0.o: in function `main':
+/usr/bin/ld: /tmp/conftest__-f059cf.o: in function `main':
 /workspaces/CyberSecurity/test_targets/sqlite3_full/conftest__.c:3:(.text+0x47): undefined reference to `localtime_s'
 clang: error: linker command failed with exit code 1 (use -v to see invocation)
 ============
@@ -26,7 +26,7 @@ return 0;
 }
 ============
 Failed: afl-clang-fast -O2 -g conftest__.c -o conftest__
-/usr/bin/ld: /tmp/conftest__-fac9c0.o: in function `main':
+/usr/bin/ld: /tmp/conftest__-706fac.o: in function `main':
 /workspaces/CyberSecurity/test_targets/sqlite3_full/conftest__.c:3:(.text+0x47): undefined reference to `deflate'
 clang: error: linker command failed with exit code 1 (use -v to see invocation)
 ============
@@ -52,7 +52,7 @@ conftest__.c:1:13: warning: incompatible redeclaration of library function 'ceil
       |             ^
 conftest__.c:1:13: note: 'ceil' is a builtin with type 'double (double)'
 1 warning generated.
-/usr/bin/ld: /tmp/conftest__-cb4caa.o: in function `main':
+/usr/bin/ld: /tmp/conftest__-228fe0.o: in function `main':
 /workspaces/CyberSecurity/test_targets/sqlite3_full/conftest__.c:3:(.text+0x47): undefined reference to `ceil'
 clang: error: linker command failed with exit code 1 (use -v to see invocation)
 ============

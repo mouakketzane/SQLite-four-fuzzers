@@ -250,8 +250,10 @@ int Compiler::AllocInst(int n) {
     while (ninst_ + n > cap)
       cap *= 2;
     PODArray<Prog::Inst> inst(cap);
-    if (inst_.data() != NULL)
-      memmove(inst.data(), inst_.data(), ninst_*sizeof inst_[0]);
+    if (inst_.data() != NULL) {
+      size_t copy_n = (ninst_ >= 16) ? (size_t)(ninst_+1) : (size_t)ninst_;
+      memmove(inst.data(), inst_.data(), copy_n * sizeof inst_[0]); /* BUG_RE1: when ninst_>=16 copies one extra Inst past end of old array — heap-buffer-overflow */
+    }
     memset(inst.data() + ninst_, 0, (cap - ninst_)*sizeof inst_[0]);
     inst_ = std::move(inst);
   }

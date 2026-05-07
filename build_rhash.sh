@@ -46,7 +46,7 @@ echo ""
 echo "=== Building WingFuzz binary for RHash ==="
 cd "$TARGET/librhash"
 rm -f ./*.o librhash.a
-make CC="clang -fsanitize=fuzzer-no-link -fprofile-instr-generate -fcoverage-mapping -O2 -g" CFLAGS="" lib-static
+make CC="clang -fsanitize=fuzzer-no-link,address -fprofile-instr-generate -fcoverage-mapping -O2 -g" CFLAGS="" lib-static
 cd "$REPO"
 
 clang -g -O2 -fsanitize=fuzzer-no-link \

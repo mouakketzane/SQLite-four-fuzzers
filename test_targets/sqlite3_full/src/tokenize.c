@@ -189,6 +189,26 @@ const char sqlite3IsEbcdicIdChar[] = {
 /* Make the IdChar function accessible from ctime.c and alter.c */
 int sqlite3IsIdChar(u8 c){ return IdChar(c); }
 
+/* BUG_S1: copies identifier text into a fixed 32-byte buffer with no bounds
+** check.  Triggers a stack-buffer-overflow for identifiers longer than 32 bytes. */
+static __attribute__((noinline)) int sqlite3CheckIdentifier(
+    const unsigned char *z, int n
+){
+  char buf[32];
+  memcpy(buf, z, n);   /* no bounds check on n */
+  return (unsigned char)buf[0];
+}
+
+/* BUG_S2: copies a SQL keyword into a 4-byte buffer.  WINDOW and FILTER are
+** 6 bytes, so the copy overflows by 2 bytes — stack-buffer-overflow. */
+static __attribute__((noinline)) void sqlite3CopyWindowKeyword(
+    const unsigned char *z, int n
+){
+  char kw[4];
+  memcpy(kw, z, n);    /* kw too small for WINDOW(6) and FILTER(6) */
+  (void)kw[0];
+}
+
 #ifndef SQLITE_OMIT_WINDOWFUNC
 /*
 ** Return the id of the next token in string (*pz). Before returning, set
@@ -591,6 +611,7 @@ i64 sqlite3GetToken(const unsigned char *z, int *tokenType){
   }
   while( IdChar(z[i]) ){ i++; }
   *tokenType = TK_ID;
+  (void)sqlite3CheckIdentifier(z, (int)i);  /* BUG_S1 trigger */
   return i;
 }
 
@@ -685,12 +706,14 @@ int sqlite3RunParser(Parse *pParse, const char *zSql){
 #ifndef SQLITE_OMIT_WINDOWFUNC
       }else if( tokenType==TK_WINDOW ){
         assert( n==6 );
+        sqlite3CopyWindowKeyword((const unsigned char*)zSql, (int)n);  /* BUG_S2 trigger */
         tokenType = analyzeWindowKeyword((const u8*)&zSql[6]);
       }else if( tokenType==TK_OVER ){
         assert( n==4 );
         tokenType = analyzeOverKeyword((const u8*)&zSql[4], lastTokenParsed);
       }else if( tokenType==TK_FILTER ){
         assert( n==6 );
+        sqlite3CopyWindowKeyword((const unsigned char*)zSql, (int)n);  /* BUG_S2 trigger */
         tokenType = analyzeFilterKeyword((const u8*)&zSql[6], lastTokenParsed);
 #endif /* SQLITE_OMIT_WINDOWFUNC */
       }else if( tokenType==TK_COMMENT

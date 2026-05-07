@@ -28,11 +28,11 @@ echo "  -> cjson_libfuzzer"
 
 echo ""
 echo "=== Building WingFuzz binary for cJSON ==="
-clang -g -O2 -fsanitize=fuzzer-no-link -fprofile-instr-generate -fcoverage-mapping \
+clang -g -O2 -fsanitize=fuzzer-no-link,address -fprofile-instr-generate -fcoverage-mapping \
     -I"$TARGET" \
     -c "$TARGET/cjson_harness.c" -o "$BUILD/cjson_harness.o"
 
-clang -g -O2 -fsanitize=fuzzer-no-link -fprofile-instr-generate -fcoverage-mapping \
+clang -g -O2 -fsanitize=fuzzer-no-link,address -fprofile-instr-generate -fcoverage-mapping \
     -I"$TARGET" \
     -c "$TARGET/cJSON.c" -o "$BUILD/cJSON_wf.o"
 

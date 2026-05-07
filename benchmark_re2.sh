@@ -154,7 +154,7 @@ count_crashes() {
 check_bins
 build_coverage_binary
 
-mkdir -p "$OUTDIR/lf_corpus" "$OUTDIR/wf_corpus"
+mkdir -p "$OUTDIR/lf_corpus" "$OUTDIR/wf_corpus" "$OUTDIR/wf_crashes"
 
 echo "============================================"
 echo "  re2 Fuzzer Benchmark  (${DURATION}s each)"
@@ -168,15 +168,26 @@ echo ""
 # ---------------------------------------------------------------------------
 echo "[1/3] LibFuzzer — running for ${DURATION}s..."
 LF_LOG="$OUTDIR/lf.log"
+LF_START=$(date +%s)
 
 "$LF_BIN" \
     "$OUTDIR/lf_corpus" \
     "$SEEDS" \
     -max_total_time="$DURATION" \
+    -keep_going=1000000 \
+    -fork=1 \
+    -artifact_prefix="$OUTDIR/lf_corpus/" \
     -print_final_stats=1 \
     2>&1 | tee "$LF_LOG" || true
 
-LF_EXECS=$(parse_lf_stat "exec/s" "$LF_LOG")
+LF_END=$(date +%s)
+LF_UNITS=$(grep -oP 'number_of_executed_units:\s*\K[0-9]+' "$LF_LOG" | tail -1 || echo "0")
+LF_ELAPSED=$(( LF_END - LF_START )); [ "$LF_ELAPSED" -le 0 ] && LF_ELAPSED=1
+LF_EXECS=$(( LF_UNITS / LF_ELAPSED ))
+if [ "$LF_EXECS" -eq 0 ]; then
+    _fb=$(grep -oP 'exec/s:?\s+\K[1-9][0-9]*' "$LF_LOG" 2>/dev/null | tail -1 || true)
+    [ -n "$_fb" ] && LF_EXECS="$_fb"
+fi
 LF_INLINE_COV=$(parse_lf_stat "cov" "$LF_LOG")
 LF_CORPUS_SIZE=$(find "$OUTDIR/lf_corpus" -maxdepth 1 -type f | wc -l)
 LF_CRASHES=$(count_crashes "$OUTDIR/lf_corpus")
@@ -189,18 +200,45 @@ echo ""
 echo "[2/3] WingFuzz — running for ${DURATION}s..."
 WF_LOG="$OUTDIR/wf.log"
 
+# Pre-filter seeds: WingFuzz fork mode replays the entire corpus at the start
+# of every fork job, so one crash-triggering seed makes every job die at
+# iteration 0 and report exec/s 0.  Only pass seeds that survive single-shot
+# replay.
+WF_SAFE_SEEDS="$OUTDIR/wf_safe_seeds"
+mkdir -p "$WF_SAFE_SEEDS"
+for _f in "$SEEDS"/*; do
+    [ -f "$_f" ] || continue
+    if "$WF_BIN" "$_f" >/dev/null 2>&1; then
+        cp "$_f" "$WF_SAFE_SEEDS/"
+    fi
+done
+[ -z "$(ls -A "$WF_SAFE_SEEDS" 2>/dev/null)" ] && printf '\x00' > "$WF_SAFE_SEEDS/seed0"
+
+WF_START=$(date +%s)
+
 LLVM_PROFILE_FILE="$OUTDIR/wf_live.profraw" \
     "$WF_BIN" \
     "$OUTDIR/wf_corpus" \
-    "$SEEDS" \
+    "$WF_SAFE_SEEDS" \
     -max_total_time="$DURATION" \
+    -fork=1 \
+    -ignore_crashes=1 \
+    -artifact_prefix="$OUTDIR/wf_crashes/" \
     -print_final_stats=1 \
     2>&1 | tee "$WF_LOG" || true
 
-WF_EXECS=$(parse_lf_stat "exec/s" "$WF_LOG")
+WF_END=$(date +%s)
+WF_UNITS=$(grep -oP 'number_of_executed_units:\s*\K[0-9]+' "$WF_LOG" | tail -1 || echo "0")
+WF_ELAPSED=$(( WF_END - WF_START )); [ "$WF_ELAPSED" -le 0 ] && WF_ELAPSED=1
+WF_EXECS=$(( WF_UNITS / WF_ELAPSED ))
+if [ "$WF_EXECS" -eq 0 ]; then
+    _fb=$(grep -oP 'exec/s:?\s+\K[1-9][0-9]*' "$WF_LOG" 2>/dev/null | tail -1 || true)
+    [ -n "$_fb" ] && WF_EXECS="$_fb"
+fi
+[ "$WF_EXECS" -eq 0 ] && [ "$WF_UNITS" -eq 0 ] && WF_EXECS="N/A"
 WF_INLINE_COV=$(parse_lf_stat "cov" "$WF_LOG")
 WF_CORPUS_SIZE=$(find "$OUTDIR/wf_corpus" -maxdepth 1 -type f | wc -l)
-WF_CRASHES=$(count_crashes "$OUTDIR/wf_corpus")
+WF_CRASHES=$(count_crashes "$OUTDIR/wf_crashes")
 echo "  -> exec/s: $WF_EXECS  |  inline cov edges: $WF_INLINE_COV  |  corpus: $WF_CORPUS_SIZE  |  crashes: $WF_CRASHES"
 echo ""
 
@@ -212,6 +250,8 @@ DDF_LOG="$OUTDIR/ddf.log"
 DDF_OUT_HOST="$OUTDIR/ddf"
 DDF_OUT_DOCKER="/workspaces/CyberSecurity/results/benchmark_re2_${RUN_ID}/ddf"
 DDF_EXECS="N/A"; DDF_CORPUS_SIZE="N/A"; DDF_CRASHES="N/A"; DDF_BRANCH_COV="N/A"
+DDF_CRASH_DIR="$DDF_OUT_HOST/default/crashes"
+DDF_START=$(date +%s)
 
 if [ "$HAS_DDFUZZ" -eq 1 ]; then
     docker run --rm \
@@ -246,12 +286,30 @@ echo "  -> exec/s: $DDF_EXECS  |  corpus: $DDF_CORPUS_SIZE  |  crashes: $DDF_CRA
 echo ""
 
 # ---------------------------------------------------------------------------
+# Bug finding report
+# ---------------------------------------------------------------------------
+LF_BUGS="none"; WF_BUGS="none"; DDF_BUGS="none"
+BUGS_SCRIPT="$REPO/bugs/scan_crashes.sh"
+if [ -x "$BUGS_SCRIPT" ]; then
+    LF_BUGS=$("$BUGS_SCRIPT" "$OUTDIR/lf_corpus"  "${LF_START:-0}"  "$LF_BIN" "re2" 2>/dev/null || echo "none")
+    WF_BUGS=$("$BUGS_SCRIPT" "$OUTDIR/wf_crashes"  "${WF_START:-0}"  "$WF_BIN" "re2" "$WF_LOG" 2>/dev/null || echo "none")
+    if [ "$HAS_DDFUZZ" -eq 1 ] && [ -d "$DDF_CRASH_DIR" ]; then
+        DDF_BUGS=$("$BUGS_SCRIPT" "$DDF_CRASH_DIR" "${DDF_START:-0}" "$LF_BIN" "re2" 2>/dev/null || echo "none")
+    fi
+fi
+echo "Bug findings (BUG_ID:seconds_elapsed):"
+printf "  LibFuzzer : %s\n" "$LF_BUGS"
+printf "  WingFuzz  : %s\n" "$WF_BUGS"
+printf "  DDFuzz    : %s\n" "$DDF_BUGS"
+echo ""
+
+# ---------------------------------------------------------------------------
 # Coverage measurement
 # ---------------------------------------------------------------------------
 echo "Measuring branch coverage for each corpus..."
 
 lf_cov_src="$OUTDIR/lf_corpus"; [ "$(find "$lf_cov_src" -maxdepth 1 -type f | wc -l)" -eq 0 ] && lf_cov_src="$SEEDS"
-wf_cov_src="$OUTDIR/wf_corpus"; [ "$(find "$wf_cov_src" -maxdepth 1 -type f | wc -l)" -eq 0 ] && wf_cov_src="$SEEDS"
+wf_cov_src="$OUTDIR/wf_corpus"; [ "$(find "$wf_cov_src" -maxdepth 1 -type f | wc -l)" -eq 0 ] && wf_cov_src="$WF_SAFE_SEEDS"
 
 measure_coverage "lf"  "$lf_cov_src" "$OUTDIR/lf.profdata" && \
     LF_BRANCH_COV=$(get_branch_cov "$OUTDIR/lf.profdata")    || LF_BRANCH_COV="N/A"
@@ -309,4 +367,7 @@ WF_BRANCH_COV=$WF_BRANCH_COV
 WF_EXECS=$WF_EXECS
 DDF_BRANCH_COV=$DDF_BRANCH_COV
 DDF_EXECS=$DDF_EXECS
+LF_BUGS="${LF_BUGS}"
+WF_BUGS="${WF_BUGS}"
+DDF_BUGS="${DDF_BUGS}"
 ENVEOF
